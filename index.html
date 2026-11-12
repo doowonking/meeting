@@ -131,6 +131,12 @@ select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;p
   padding:12px 22px;border-radius:14px;background:rgba(15,16,20,.55);backdrop-filter:blur(4px);
   font-size:22px;font-weight:700;z-index:3;pointer-events:none;text-shadow:0 1px 6px rgba(0,0,0,.8);white-space:nowrap}
 .pause-ov small{font-size:13px;font-weight:400;color:#c9ced8}
+.tts-warn{position:absolute;left:50%;top:70px;transform:translateX(-50%);width:min(560px,calc(100% - 24px));text-align:center;
+  padding:10px 14px;border-radius:10px;background:rgba(240,160,60,.92);color:#1a1408;font-size:14px;font-weight:600;z-index:3;line-height:1.5}
+.tts-warn small{font-weight:400}
+.test-msg{margin-top:12px;font-size:13.5px;line-height:1.6;padding:10px 12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)}
+.test-msg.ok{border-color:rgba(70,167,88,.5)}
+.test-msg.bad{border-color:rgba(240,160,60,.6)}
 .countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);background:rgba(0,0,0,.55);z-index:3}
 
 /* ---------- 결과 ---------- */
@@ -276,9 +282,11 @@ select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;p
 
     <div class="actions">
       <button class="btn primary" id="startBtn">면접 시작</button>
+      <button class="btn" id="testBtn">🔊 소리 테스트</button>
       <button class="btn" id="studioBtn">면접관 음성 녹음실</button>
       <span class="count" id="poolCount"></span>
     </div>
+    <div class="test-msg hidden" id="testMsg"></div>
   </div>
 </section>
 
@@ -293,6 +301,7 @@ select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;p
   </div>
 
   <div class="subtitle" id="subtitle"></div>
+  <div class="tts-warn hidden" id="ttsWarn">면접관 음성이 재생되지 않고 있습니다. 자막을 보고 답하세요.<br><small>면접을 끝내고 설정 화면의 🔊 소리 테스트로 확인해 보세요.</small></div>
 
   <div class="pip">
     <video id="cam" muted playsinline autoplay></video>
@@ -455,6 +464,7 @@ const VoiceDB = {
   keys() { return this.tx('readonly', s => s.getAllKeys()).catch(() => []); }
 };
 const fileVoiceMiss = new Set(), fileVoiceExt = {};
+let ttsWarned = false;
 
 /* ---------- 음성 출력 ---------- */
 let voices = [];
@@ -504,7 +514,7 @@ function unlockAudio() {
   // 반드시 버튼을 누른 그 순간(await 전에) 호출해야 휴대폰에서 소리가 납니다.
   try { const c = getCtx(); if (c && c.state === 'suspended') c.resume(); } catch (e) {}
   try { voiceEl.src = SILENT_WAV; voiceEl.play().then(() => { if (voiceEl.src === SILENT_WAV) voiceEl.pause(); }).catch(() => {}); } catch (e) {}
-  try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch (e) {}
+  try { if ('speechSynthesis' in window) { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance('.'); u.lang = 'ko-KR'; u.volume = 0; ttsHold = u; speechSynthesis.speak(u); } } catch (e) {}
   try { vid.muted = false; vid.play().catch(() => {}); vid.muted = true; } catch (e) {}
 }
 let wakeLock = null;
@@ -515,20 +525,35 @@ async function keepAwake(on) {
   } catch (e) {}
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && phase !== 'idle') keepAwake(true); });
+// 안드로이드 Chrome은 재생 중인 문장 객체를 붙잡아 두지 않으면 중간에 사라져 소리가 끊기는 문제가 있어 전역에 보관합니다.
+let ttsHold = null;
+const ttsStat = { started: 0, errors: 0, lastErr: '' };
+function makeUtter(text, spk) {
+  const u = new SpeechSynthesisUtterance(spoken(text));
+  u.lang = 'ko-KR';
+  const v = voices.find(v => v.name === S.voice) || voices[0]; if (v) u.voice = v;
+  u.rate = +S.rate || 1; u.pitch = (SPK[spk] || SPK.B).pitch; u.volume = 1;
+  u.onstart = () => { ttsStat.started++; };
+  ttsHold = u;
+  return u;
+}
 function speakTTS(text, spk, token) {
   return new Promise(res => {
     if (!('speechSynthesis' in window)) return res();
-    let done = false, timer = null, restart = false;
+    let done = false, timer = null;
     const fin = () => { if (done) return; done = true; clearTimeout(timer); if (cur && cur.tts) cur = null; res(); };
-    const start = () => {
-      if (token !== speakToken) return fin();
-      const u = new SpeechSynthesisUtterance(spoken(text));
-      u.lang = 'ko-KR';
-      const v = voices.find(v => v.name === S.voice) || voices[0]; if (v) u.voice = v;
-      u.rate = +S.rate || 1; u.pitch = (SPK[spk] || SPK.B).pitch;
-      u.onend = u.onerror = () => { if (paused && cur && cur.tts) { restart = true; return; } fin(); };
+    const start = async () => {
+      if (token !== speakToken || done) return fin();
+      // 말하는 중에 cancel 직후 바로 speak 하면 휴대폰에서 소리 없이 무시되는 경우가 있어 잠깐 쉽니다.
+      if (speechSynthesis.speaking || speechSynthesis.pending) { speechSynthesis.cancel(); await new Promise(r => setTimeout(r, 150)); }
+      if (token !== speakToken || done) return fin();
+      if (speechSynthesis.paused) speechSynthesis.resume();
+      const u = makeUtter(text, spk);
+      const end = () => { if (paused && cur && cur.tts) return; fin(); };
+      u.onend = end;
+      u.onerror = e => { ttsStat.errors++; ttsStat.lastErr = e && e.error || 'error'; end(); };
       clearTimeout(timer); timer = setTimeout(fin, 5000 + text.length * 220 / u.rate);
-      speechSynthesis.cancel(); speechSynthesis.speak(u);
+      speechSynthesis.speak(u);
     };
     cur = { tts: true,
       stop() { fin(); speechSynthesis.cancel(); },
@@ -555,7 +580,14 @@ async function say(ph, spk, opts = {}) {
     }
     if (!played && token === speakToken) fileVoiceMiss.add(ph.id);
   }
-  if (!played && token === speakToken) await speakTTS(ph.text, spk, token);
+  if (!played && token === speakToken) {
+    const before = ttsStat.started;
+    await speakTTS(ph.text, spk, token);
+    if (token === speakToken && ttsStat.started === before && phase !== 'idle' && !ttsWarned) {
+      ttsWarned = true;
+      const w = $('#ttsWarn'); if (w) { w.classList.remove('hidden'); setTimeout(() => w.classList.add('hidden'), 9000); }
+    }
+  }
   await waitWhilePaused();
 }
 
@@ -564,11 +596,48 @@ let media = null, analyser = null, micBuf = null, audioCtx = null, recorder = nu
 async function initMedia(wantVideo) {
   if (media) return media;
   const audio = { echoCancellation: true, noiseSuppression: true };
-  try { media = await navigator.mediaDevices.getUserMedia({ video: wantVideo ? { width: 640, height: 480 } : false, audio }); }
-  catch (e) { try { media = await navigator.mediaDevices.getUserMedia({ audio }); } catch (e2) { media = null; } }
+  const vbase = { width: { ideal: 640 }, height: { ideal: 480 } };
+  let camErr = null;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) camErr = 'insecure';
+  else {
+    try { media = await navigator.mediaDevices.getUserMedia({ video: wantVideo ? { ...vbase, facingMode: 'user' } : false, audio }); }
+    catch (e) { camErr = e && e.name || 'Error'; try { media = await navigator.mediaDevices.getUserMedia({ audio }); } catch (e2) { media = null; } }
+  }
+  // 노트북의 얼굴 인식용 적외선(IR) 카메라가 잡히면 화면이 검게 나오므로 일반 카메라로 바꿉니다.
+  try {
+    const vt = media && media.getVideoTracks()[0];
+    if (vt && /\bIR\b|infrared|적외선/i.test(vt.label)) {
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput' && !/\bIR\b|infrared|적외선/i.test(d.label));
+      if (cams.length) {
+        const vs = await navigator.mediaDevices.getUserMedia({ video: { ...vbase, deviceId: { exact: cams[0].deviceId } } });
+        media.removeTrack(vt); vt.stop(); media.addTrack(vs.getVideoTracks()[0]);
+      }
+    }
+  } catch (e) {}
+  // 기본 카메라 열기에 실패했으면(적외선 카메라가 기본인 경우 등) 일반 카메라를 하나씩 직접 시도합니다.
+  if (wantVideo && media && !media.getVideoTracks().length && camErr !== 'NotAllowedError') {
+    try {
+      const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput')
+        .sort((a, b) => (/\bIR\b|infrared/i.test(a.label) ? 1 : 0) - (/\bIR\b|infrared/i.test(b.label) ? 1 : 0));
+      for (const c of cams) {
+        try { const vs = await navigator.mediaDevices.getUserMedia({ video: { ...vbase, deviceId: { exact: c.deviceId } } }); media.addTrack(vs.getVideoTracks()[0]); camErr = null; break; }
+        catch (e) { camErr = e && e.name || camErr; }
+      }
+    } catch (e) {}
+  }
   const hasVideo = media && media.getVideoTracks().length > 0;
   $('#cam').srcObject = hasVideo ? media : null;
   $('#camOff').classList.toggle('hidden', !!hasVideo);
+  if (!hasVideo) {
+    const why = {
+      NotAllowedError: '카메라 권한이 막혀 있습니다.<br>주소창 왼쪽 🔒 → 카메라 <b>허용</b> 후 새로고침',
+      NotFoundError: '카메라를 찾지 못했습니다',
+      NotReadableError: '다른 프로그램(줌·팀즈·카메라 앱 등)이<br>카메라를 쓰고 있습니다. 끄고 다시 시작',
+      OverconstrainedError: '카메라 설정이 맞지 않습니다',
+      insecure: 'https 주소(또는 start.bat)로 열어야<br>카메라를 쓸 수 있습니다'
+    }[camErr] || '카메라를 쓸 수 없습니다';
+    $('#camOff').innerHTML = `${why}<br><span style="opacity:.7">(음성만 진행)</span>`;
+  }
   if (media && media.getAudioTracks().length && getCtx()) {
     const src = audioCtx.createMediaStreamSource(media);
     analyser = audioCtx.createAnalyser(); analyser.fftSize = 1024; micBuf = new Float32Array(analyser.fftSize);
@@ -1096,7 +1165,41 @@ $('#rate').addEventListener('input', updatePool);
 updatePool();
 loadVoices(); if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = loadVoices;
 
-$('#startBtn').onclick = startInterview;
+// 소리 테스트: 버튼을 누른 그 순간에 바로 말하게 해서, 기기에서 음성이 나오는지 확인합니다.
+function soundTest() {
+  S = readSettings();
+  const box = $('#testMsg'); box.className = 'test-msg'; box.classList.remove('hidden');
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform));
+  const all = 'speechSynthesis' in window ? speechSynthesis.getVoices() : [];
+  const ko = all.filter(v => /^ko/i.test(v.lang));
+  if (!('speechSynthesis' in window)) { box.classList.add('bad'); box.innerHTML = '이 브라우저는 컴퓨터 음성 기능이 없습니다. 아이폰은 Safari, 안드로이드는 Chrome으로 열어 주세요.'; return; }
+  try { getCtx() && audioCtx.resume(); } catch (e) {}
+  speechSynthesis.cancel();
+  const before = ttsStat.started, errBefore = ttsStat.errors;
+  const u = makeUtter('안녕하세요. 면접관 목소리 테스트입니다. 잘 들리시나요?', 'B');
+  u.onerror = e => { ttsStat.errors++; ttsStat.lastErr = e && e.error || 'error'; };
+  speechSynthesis.speak(u);
+  box.innerHTML = '음성을 재생하는 중…';
+  setTimeout(() => {
+    const started = ttsStat.started > before, err = ttsStat.errors > errBefore;
+    const info = `<br><small style="color:var(--muted)">한국어 음성 ${ko.length}개 (전체 ${all.length}개)${u.voice ? ' · 사용: ' + escapeHtml(u.voice.name) : ''}${err ? ' · 오류: ' + escapeHtml(ttsStat.lastErr) : ''}</small>`;
+    if (started && !err) {
+      box.classList.add('ok');
+      box.innerHTML = '음성 재생을 시작했습니다. <b>소리가 들렸다면 정상</b>입니다.<br>안 들렸다면: ' +
+        (isIOS ? '옆면 <b>무음 스위치</b>를 끄고(주황색이 안 보이게) 볼륨 버튼으로 <b>미디어 볼륨</b>을 올려 보세요.' : '볼륨 버튼을 누른 뒤 <b>미디어 볼륨</b>을 올려 보세요.') + info;
+    } else {
+      box.classList.add('bad');
+      box.innerHTML = '기기에서 음성이 시작되지 않았습니다.<br>' +
+        (ko.length === 0
+          ? (isIOS ? '설정 → 손쉬운 사용 → 읽기 및 말하기 → 음성 → <b>한국어</b> 음성을 내려받은 뒤 다시 해 보세요.'
+                   : '설정 → 일반(또는 접근성) → <b>텍스트 음성 변환(TTS)</b>에서 기본 엔진을 Google로 하고 <b>한국어 음성 데이터</b>를 설치한 뒤 다시 해 보세요.')
+          : (isIOS ? '무음 스위치를 끄고, Safari로 열었는지 확인해 주세요. (카카오톡 안의 브라우저에서는 소리가 막힐 수 있습니다)'
+                   : 'Chrome으로 열었는지 확인해 주세요. (카카오톡·네이버 앱 안의 브라우저에서는 소리가 막힐 수 있습니다)')) + info;
+    }
+  }, 2500);
+}
+$('#testBtn').onclick = soundTest;
+$('#startBtn').onclick = () => { ttsWarned = false; startInterview(); };
 $('#studioBtn').onclick = () => { show('studio'); renderStudio(); };
 $('#studioBack').onclick = () => { if (stRecorder) stRecorder.stop(); if (AR.running) AR.stop = true; stopSpeaking(); show('setup'); updateVoiceNote(); };
 $('#stFilter').onchange = renderStudio;
