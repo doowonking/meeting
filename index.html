@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0b0c0e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>모의 면접실</title>
+<style>
+:root{
+  --bg:#0b0c0e; --panel:#15171b; --panel2:#1d2026; --line:#2a2e36; --text:#eceef2; --muted:#9aa1ad;
+  --accent:#d9b36c; --accent-ink:#1a1408; --danger:#e5484d; --ok:#46a758; --warn:#f0a03c;
+  --font:"Pretendard","Apple SD Gothic Neo","Malgun Gothic","맑은 고딕",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+.hidden{display:none!important}
+
+/* ---------- 공통 배경 영상 ---------- */
+#stage{position:fixed;inset:0;overflow:hidden;background:#000}
+#vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% 50%;transform-origin:50% 35%;
+  transition:transform 1.6s cubic-bezier(.3,.1,.2,1), object-position 1.4s cubic-bezier(.3,.1,.2,1), filter .8s}
+#stage.blur #vid{filter:blur(10px) brightness(.45)}
+#stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%)}
+
+/* ---------- 설정 화면 ---------- */
+.screen{position:fixed;inset:0;overflow:auto;z-index:5}
+#setup{display:flex;align-items:flex-start;justify-content:center;padding:40px 16px}
+.card{width:min(760px,100%);background:rgba(18,20,24,.92);border:1px solid var(--line);border-radius:16px;padding:28px;backdrop-filter:blur(6px)}
+.card h1{margin:0 0 4px;font-size:26px;letter-spacing:-.02em}
+.card .sub{margin:0 0 22px;color:var(--muted);font-size:14px;line-height:1.5}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 20px}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
+.field label.t{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.field.full{grid-column:1/-1}
+select,input[type=range]{width:100%}
+select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 10px;color:var(--text);font:inherit;font-size:14px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:14px;user-select:none;cursor:pointer}
+.chip input{accent-color:var(--accent);margin:0}
+.chip small{color:var(--muted)}
+.toggles{display:grid;grid-template-columns:1fr 1fr;gap:8px 20px}
+@media (max-width:640px){.toggles{grid-template-columns:1fr}}
+.tog{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.tog input{accent-color:var(--accent);width:16px;height:16px}
+.actions{display:flex;gap:10px;align-items:center;margin-top:24px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--panel2);border-radius:10px;padding:11px 18px;font-size:15px}
+.btn:hover{border-color:#3a404b}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.small{padding:6px 10px;font-size:13px;border-radius:8px}
+.count{color:var(--muted);font-size:14px;margin-left:auto}
+.hint{font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.5}
+.voice-note{margin-top:18px;padding:12px 14px;border-radius:10px;background:rgba(217,179,108,.08);border:1px solid rgba(217,179,108,.25);font-size:13px;line-height:1.6;color:#e4d3ae}
+
+/* ---------- 면접실 ---------- */
+#room{z-index:4;pointer-events:none}
+#room > *{pointer-events:auto}
+.topbar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:16px;padding:16px 22px;
+  background:linear-gradient(rgba(0,0,0,.6),transparent);font-size:14px}
+.rec-dot{display:inline-flex;align-items:center;gap:7px;color:#ffb4b4;font-weight:600;letter-spacing:.04em}
+.rec-dot::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--danger);animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.25}}
+.progress{display:flex;gap:5px;align-items:center}
+.progress i{width:18px;height:4px;border-radius:2px;background:rgba(255,255,255,.18)}
+.progress i.done{background:rgba(255,255,255,.55)}
+.progress i.now{background:var(--accent)}
+.topbar .sp{flex:1}
+.timer{font-variant-numeric:tabular-nums;font-size:22px;font-weight:600;letter-spacing:.02em;min-width:110px;text-align:right}
+.timer small{font-size:13px;color:var(--muted);font-weight:400}
+.timer.over{color:var(--warn)}
+.state{font-size:13px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.1)}
+.state.listen{background:rgba(70,167,88,.25);color:#bfe8c7}
+.state.ask{background:rgba(217,179,108,.22);color:#f1dcae}
+
+.subtitle{position:absolute;left:50%;bottom:112px;transform:translateX(-50%);width:min(900px,calc(100% - 2 * (min(260px,30vw) + 40px)));text-align:center;
+  font-size:clamp(17px,2.1vw,24px);line-height:1.45;text-shadow:0 2px 8px rgba(0,0,0,.9);transition:opacity .4s}
+.subtitle .who{display:inline-block;font-size:13px;color:var(--accent);margin-bottom:4px;letter-spacing:.05em}
+.subtitle span.txt{background:rgba(0,0,0,.55);padding:4px 12px;border-radius:6px;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+
+.pip{position:absolute;right:22px;bottom:104px;width:min(260px,30vw);aspect-ratio:4/3;border-radius:12px;overflow:hidden;
+  background:#111;border:1px solid rgba(255,255,255,.18);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.pip video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+.pip .off{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center;padding:8px}
+.pip .lbl{position:absolute;left:8px;bottom:8px;font-size:12px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:5px}
+.pip .meter{position:absolute;right:8px;bottom:9px;width:56px;height:6px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden}
+.pip .meter b{display:block;height:100%;width:0;background:var(--ok);transition:width .08s}
+
+.controls{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:12px;padding:22px 16px 26px;
+  background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.cbtn{display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.2);background:rgba(20,22,26,.75);backdrop-filter:blur(6px);
+  border-radius:999px;padding:11px 20px;font-size:15px}
+.cbtn:hover{background:rgba(40,44,52,.85)}
+.cbtn.main{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+.cbtn.end{border-color:rgba(229,72,77,.5);color:#ffb3b5}
+.cbtn kbd{font:inherit;font-size:11px;opacity:.6;border:1px solid currentColor;border-radius:4px;padding:0 4px}
+.cbtn{white-space:nowrap}
+.cbtn .s{display:none}
+.topbar{padding-top:max(16px,env(safe-area-inset-top))}
+@media (max-width:480px){.cbtn .l{display:none}.cbtn .s{display:inline}.controls .cbtn{flex:1;justify-content:center;max-width:110px}}
+.controls{padding-bottom:max(26px,calc(12px + env(safe-area-inset-bottom)))}
+@media (max-width:640px){
+  .cbtn kbd{display:none}
+  .cbtn{padding:9px 11px;font-size:13px;gap:5px}
+  .controls{gap:6px;padding-left:8px;padding-right:8px;padding-top:14px}
+  .topbar{gap:8px;padding-left:12px;padding-right:12px;font-size:12px}
+  .progress i{display:none}
+  .progress span{margin-left:0!important}
+  .timer{font-size:18px;min-width:0}
+  .state{font-size:12px;padding:4px 8px}
+  .pip{bottom:calc(84px + env(safe-area-inset-bottom));right:12px;width:32vw}
+  .subtitle{bottom:calc(84px + 24vw + 34px + env(safe-area-inset-bottom));width:calc(100% - 24px);font-size:17px}
+  .card{padding:20px}
+  .pause-ov{font-size:24px}
+}
+@media (max-height:500px) and (orientation:landscape){
+  .pip{width:18vw;bottom:70px;right:14px}
+  .subtitle{bottom:66px;font-size:16px;width:calc(100% - 2 * (18vw + 28px))}
+  .controls{padding-top:10px;padding-bottom:max(10px,env(safe-area-inset-bottom))}
+  .cbtn{padding:7px 12px;font-size:13px}
+  .cbtn kbd{display:none}
+  .topbar{padding-top:max(8px,env(safe-area-inset-top));padding-bottom:8px}
+}
+
+.pause-ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  background:rgba(0,0,0,.6);font-size:28px;font-weight:700;z-index:3}
+.pause-ov small{font-size:15px;font-weight:400;color:var(--muted)}
+.countdown{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);background:rgba(0,0,0,.55);z-index:3}
+
+/* ---------- 결과 ---------- */
+#review{background:var(--bg);z-index:6;padding:32px 16px}
+.wrap{max-width:980px;margin:0 auto}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0 24px}
+@media (max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.stat b{display:block;font-size:26px;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--muted)}
+.rv-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+.recbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+.recbox video{width:100%;max-height:420px;background:#000;border-radius:8px;transform:scaleX(-1)}
+.qa{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:10px}
+.qa .h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.qa .n{color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
+.qa .q{font-size:16px;font-weight:600;flex:1;min-width:200px}
+.qa .meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.qa .meta .over{color:var(--warn)}
+.qa details{margin-top:10px;font-size:14px;line-height:1.65}
+.qa summary{cursor:pointer;color:var(--muted);font-size:13px}
+.qa .ans{margin-top:8px;padding:12px 14px;background:var(--panel2);border-radius:8px;white-space:pre-wrap}
+.qa .note{margin-top:6px;font-size:13px;color:#d8c49a}
+.qa .fu{margin-top:8px;font-size:13.5px;color:var(--muted)}
+.qa .fu b{color:var(--text);font-weight:600}
+.tag{font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--panel2);color:var(--muted);border:1px solid var(--line)}
+.tag.follow{color:#f1dcae;border-color:rgba(217,179,108,.4)}
+
+/* ---------- 음성 녹음실 ---------- */
+#studio{background:var(--bg);z-index:6;padding:32px 16px}
+.st-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.st-row{display:grid;grid-template-columns:90px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.st-row .id{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.st-row .tx{font-size:14.5px;line-height:1.5}
+.st-row .tx .src{display:block;font-size:12px;color:var(--muted)}
+.st-row .bt{display:flex;gap:6px;align-items:center}
+.badge{font-size:11.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.badge.rec{color:#bfe8c7;border-color:rgba(70,167,88,.5)}
+.badge.file{color:#b9d4ff;border-color:rgba(100,150,255,.5)}
+.btn.recording{background:var(--danger);border-color:var(--danger);color:#fff}
+@media (max-width:640px){.st-row{grid-template-columns:1fr}.st-row .id{display:none}}
+</style>
+</head>
+<body>
+
+<div id="stage" class="blur">
+  <video id="vid" src="media/interviewer.mp4" muted loop playsinline autoplay></video>
+</div>
+
+<!-- ============ 설정 ============ -->
+<section id="setup" class="screen">
+  <div class="card">
+    <h1>모의 면접실</h1>
+    <p class="sub">면접관이 질문하면 화면을 보며 실제처럼 소리 내어 답하세요. 끝나면 답변 시간, 모범 답안, 녹화 영상을 확인할 수 있습니다.</p>
+
+    <div class="grid">
+      <div class="field full">
+        <label class="t">질문 범위</label>
+        <div class="chips" id="cats"></div>
+      </div>
+      <div class="field">
+        <label class="t">지원 대학</label>
+        <select id="univ">
+          <option value="">전체 (대학 구분 없음)</option>
+          <option value="인천">인천대 기계공학과</option>
+          <option value="인하">인하대 기계공학과</option>
+          <option value="숭실">숭실대 기계공학부</option>
+          <option value="명지">명지대 기계시스템공학부</option>
+          <option value="경기">경기대 기계시스템공학과</option>
+        </select>
+        <div class="hint">대학을 고르면 그 대학에서 특히 나올 질문 위주로 뽑습니다.</div>
+      </div>
+      <div class="field">
+        <label class="t">질문 수</label>
+        <select id="count">
+          <option value="5">5개 (약 5분)</option>
+          <option value="8">8개 (약 8분)</option>
+          <option value="10" selected>10개 (약 10분, 실전)</option>
+          <option value="15">15개</option>
+          <option value="0">해당 질문 전부</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="t">순서</label>
+        <select id="order">
+          <option value="random">무작위</option>
+          <option value="seq">자료 순서대로</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="t">꼬리 질문</label>
+        <select id="follow">
+          <option value="0">없음</option>
+          <option value="0.35" selected>가끔</option>
+          <option value="0.7">자주</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="t">답변 제한 시간</label>
+        <select id="limit">
+          <option value="0">없음</option>
+          <option value="45">45초</option>
+          <option value="60" selected>1분 (권장)</option>
+          <option value="90">1분 30초</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="t">말이 멈추면 자동으로 다음 질문</label>
+        <select id="silence">
+          <option value="0">끔 (버튼으로 넘김)</option>
+          <option value="4">4초 침묵 후</option>
+          <option value="6">6초 침묵 후</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label class="t">진행 옵션</label>
+        <div class="toggles">
+          <label class="tog"><input type="checkbox" id="firstMotive" checked> 첫 질문은 지원 동기</label>
+          <label class="tog"><input type="checkbox" id="lastWord" checked> 마지막 한마디 질문</label>
+          <label class="tog"><input type="checkbox" id="cutoff" checked> 시간 초과 시 면접관이 끊기</label>
+          <label class="tog"><input type="checkbox" id="subs" checked> 질문 자막 보기</label>
+          <label class="tog"><input type="checkbox" id="introAudio" checked> 시작할 때 영상 원본 소리 재생</label>
+          <label class="tog"><input type="checkbox" id="ambience" checked> 면접장 배경 소음</label>
+          <label class="tog"><input type="checkbox" id="record" checked> 내 답변 녹화하기</label>
+          <label class="tog"><input type="checkbox" id="zoom" checked> 질문하는 면접관 쪽으로 화면 이동</label>
+        </div>
+      </div>
+      <div class="field">
+        <label class="t">녹음 없는 질문에 쓸 컴퓨터 음성</label>
+        <select id="voice"></select>
+      </div>
+      <div class="field">
+        <label class="t">말하기 속도 <span id="rateV"></span></label>
+        <input type="range" id="rate" min="0.8" max="1.2" step="0.05" value="1">
+      </div>
+    </div>
+
+    <div class="voice-note" id="voiceNote"></div>
+
+    <div class="actions">
+      <button class="btn primary" id="startBtn">면접 시작</button>
+      <button class="btn" id="studioBtn">면접관 음성 녹음실</button>
+      <span class="count" id="poolCount"></span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 면접실 ============ -->
+<section id="room" class="screen hidden">
+  <div class="topbar">
+    <span class="rec-dot" id="recDot">면접 중</span>
+    <span class="progress" id="progress"></span>
+    <span class="state" id="state">준비</span>
+    <span class="sp"></span>
+    <span class="timer" id="timer">00:00</span>
+  </div>
+
+  <div class="subtitle" id="subtitle"></div>
+
+  <div class="pip">
+    <video id="cam" muted playsinline autoplay></video>
+    <div class="off hidden" id="camOff">카메라를 쓸 수 없습니다<br>(음성만 진행)</div>
+    <span class="lbl">나</span>
+    <span class="meter"><b id="meter"></b></span>
+  </div>
+
+  <div class="controls">
+    <button class="cbtn" id="pauseBtn">⏸ <span class="l">일시정지</span><span class="s">정지</span> <kbd>Space</kbd></button>
+    <button class="cbtn" id="repeatBtn">↺ <span class="l">다시 듣기</span><span class="s">다시</span> <kbd>R</kbd></button>
+    <button class="cbtn main" id="nextBtn"><span class="l">다음 질문</span><span class="s">다음</span> ⏭ <kbd>→</kbd></button>
+    <button class="cbtn end" id="endBtn">⏹ <span class="l">면접 종료</span><span class="s">종료</span></button>
+  </div>
+
+  <div class="pause-ov hidden" id="pauseOv">일시정지<small>▶ 계속 버튼을 누르면 이어서 진행합니다</small></div>
+  <div class="countdown hidden" id="countdown"></div>
+</section>
+
+<!-- ============ 결과 ============ -->
+<section id="review" class="screen hidden">
+  <div class="wrap">
+    <div class="actions" style="margin-top:0">
+      <h1 style="margin:0;font-size:24px">면접 결과</h1>
+      <span class="sp" style="flex:1"></span>
+      <button class="btn" id="againBtn">같은 설정으로 다시</button>
+      <button class="btn primary" id="homeBtn">처음으로</button>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="rv-layout">
+      <div class="recbox hidden" id="recBox">
+        <video id="recVid" controls playsinline></video>
+        <div class="actions" style="margin-top:10px">
+          <span class="hint" style="margin:0">아래 질문 번호를 누르면 그 답변 장면으로 이동합니다.</span>
+          <span style="flex:1"></span>
+          <a class="btn small" id="recDl" download="모의면접_녹화.webm">녹화 파일 저장</a>
+        </div>
+      </div>
+      <div id="qaList"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 음성 녹음실 ============ -->
+<section id="studio" class="screen hidden">
+  <div class="wrap">
+    <div class="actions" style="margin-top:0">
+      <h1 style="margin:0;font-size:24px">면접관 음성 녹음실</h1>
+      <span style="flex:1"></span>
+      <button class="btn primary" id="studioBack">설정으로 돌아가기</button>
+    </div>
+    <p class="hint" style="font-size:14px">부모님이나 친구, 선생님이 질문을 한 번씩 읽어 녹음해 두면 면접 때 그 목소리로 질문합니다. 녹음은 녹음한 기기(이 컴퓨터나 휴대폰)의 브라우저에만 저장됩니다. 다른 기기에서도 쓰려면 파일로 넣어야 합니다.
+      다른 곳에서 녹음한 파일은 <code>media/voice/질문ID.mp3</code> 이름으로 넣어도 됩니다.</p>
+    <div class="st-head">
+      <select id="stFilter" style="width:auto"></select>
+      <span class="hint" id="stCount" style="margin:0"></span>
+    </div>
+    <div id="stList"></div>
+  </div>
+</section>
+
+<script src="questions.js"></script>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const BANK = (window.QUESTION_BANK || []).map(q => ({ ...q, univ: [].concat(q.univ || []), notes: [].concat(q.notes || []), follow: [].concat(q.follow || []) }));
+const CATS = ['공통 질문', '세특 개념', '대학 맞춤', '학교 질문지'];
+const SPK = {
+  A: { name: '면접관 A', x: 22, y: 34, pitch: 0.95 },
+  B: { name: '면접관 B', x: 50, y: 32, pitch: 0.85 },
+  C: { name: '면접관 C', x: 78, y: 34, pitch: 1.0 }
+};
+const PH = {
+  intro:   { id: '_intro',   text: '안녕하세요. 지금부터 면접을 시작하겠습니다. 긴장하지 마시고, 편하게 답변해 주세요.' },
+  ack1:    { id: '_ack1',    text: '네, 알겠습니다.' },
+  ack2:    { id: '_ack2',    text: '네, 잘 들었습니다.' },
+  ack3:    { id: '_ack3',    text: '네, 좋습니다.' },
+  ack4:    { id: '_ack4',    text: '네.' },
+  fu1:     { id: '_fu1',     text: '방금 말씀하신 것과 관련해서 하나 더 여쭤보겠습니다.' },
+  fu2:     { id: '_fu2',     text: '조금 더 구체적으로 여쭤볼게요.' },
+  timeup:  { id: '_timeup',  text: '네, 시간 관계상 다음 질문으로 넘어가겠습니다.' },
+  next:    { id: '_next',    text: '다음 질문입니다.' },
+  last:    { id: '_last',    text: '마지막으로 하고 싶은 말이 있으면 해 주세요.' },
+  closing: { id: '_closing', text: '네, 수고하셨습니다. 이것으로 면접을 마치겠습니다. 감사합니다.' }
+};
+const ACKS = [PH.ack1, PH.ack2, PH.ack3, PH.ack4];
+const IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Mac/i.test(navigator.platform));
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+function getCtx() { const C = window.AudioContext || window.webkitAudioContext; if (!audioCtx && C) audioCtx = new C(); return audioCtx; }
+
+/* ---------- 문장 다듬기: 자료의 짧은 질문을 면접관 말투로 ---------- */
+function politeize(q) {
+  let s = q.trim();
+  s = s.replace(/설명해 보라\.?$/, '설명해 보세요.').replace(/말해 보라\.?$/, '말해 보세요.');
+  if (/[는은]\?$/.test(s)) s = s.replace(/\?$/, ' 무엇인가요?');
+  else if (/[나까가]\?$/.test(s)) s = s.replace(/\?$/, '요?');
+  else if (!/[?.]$/.test(s)) s += '. 이에 대해 말씀해 주시겠어요?';
+  return s;
+}
+function spoken(t) {
+  return t.replace(/Ⅰ/g, '1').replace(/Ⅱ/g, '2').replace(/[『』「」]/g, '').replace(/[‘’']/g, '')
+          .replace(/\s*—\s*/g, ', ').replace(/·/g, ', ').replace(/\s*\/\s*/g, ', ').replace(/−/g, '마이너스 ');
+}
+
+/* ---------- 설정 저장 ---------- */
+const SET_KEYS = ['univ','count','order','follow','limit','silence','firstMotive','lastWord','cutoff','subs','introAudio','ambience','record','zoom','voice','rate'];
+function readSettings() {
+  const s = {};
+  for (const k of SET_KEYS) { const el = $('#' + k); s[k] = el.type === 'checkbox' ? el.checked : el.value; }
+  s.cats = [...document.querySelectorAll('#cats input:checked')].map(i => i.value);
+  return s;
+}
+function saveSettings() { try { localStorage.setItem('interview-settings', JSON.stringify(readSettings())); } catch (e) {} }
+function loadSettings() {
+  let s = null; try { s = JSON.parse(localStorage.getItem('interview-settings')); } catch (e) {}
+  if (!s) return;
+  for (const k of SET_KEYS) { const el = $('#' + k); if (!el || s[k] === undefined) continue; if (el.type === 'checkbox') el.checked = s[k]; else el.value = s[k]; }
+  if (s.cats) document.querySelectorAll('#cats input').forEach(i => i.checked = s.cats.includes(i.value));
+}
+
+/* ---------- 음성 저장소 (IndexedDB) ---------- */
+const VoiceDB = {
+  db: null,
+  open() {
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((res, rej) => {
+      try {
+        const r = indexedDB.open('interview-voices', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('v');
+        r.onsuccess = () => { this.db = r.result; res(this.db); };
+        r.onerror = () => rej(r.error);
+      } catch (e) { rej(e); }
+    });
+  },
+  async tx(mode, fn) { const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('v', mode); const r = fn(t.objectStore('v')); t.oncomplete = () => res(r && r.result); t.onerror = () => rej(t.error); }); },
+  get(id) { return this.tx('readonly', s => s.get(id)).catch(() => null); },
+  put(id, blob) { return this.tx('readwrite', s => s.put(blob, id)); },
+  del(id) { return this.tx('readwrite', s => s.delete(id)); },
+  keys() { return this.tx('readonly', s => s.getAllKeys()).catch(() => []); }
+};
+const fileVoiceMiss = new Set();
+
+/* ---------- 음성 출력 ---------- */
+let voices = [];
+function loadVoices() {
+  voices = speechSynthesis.getVoices().filter(v => /^ko/i.test(v.lang));
+  const rank = v => (/InJoon|Hyunsu|남/i.test(v.name) ? 0 : 2) + (/Online|Natural|Neural/i.test(v.name) ? 0 : 1);
+  voices.sort((a, b) => rank(a) - rank(b));
+  const sel = $('#voice'), prev = sel.value;
+  sel.innerHTML = voices.length ? voices.map(v => `<option value="${v.name}">${v.name.replace(/^Microsoft\s*/, '').replace(/ - Korean.*$/, '')}${/Online|Natural/i.test(v.name) ? ' (자연스러움)' : ''}</option>`).join('')
+                                : '<option value="">한국어 음성 없음</option>';
+  if (prev && voices.some(v => v.name === prev)) sel.value = prev;
+  updateVoiceNote();
+}
+function updateVoiceNote() {
+  const natural = voices.some(v => /Online|Natural/i.test(v.name));
+  VoiceDB.keys().then(keys => {
+    const n = (keys || []).filter(k => !String(k).startsWith('_')).length;
+    $('#voiceNote').innerHTML =
+      `<b>면접관 목소리</b> — 녹음실에서 사람 목소리로 녹음한 질문은 그 목소리로, 녹음하지 않은 질문은 컴퓨터 음성으로 읽습니다. 지금 녹음된 질문: <b>${n}개</b>.` +
+      (IS_MOBILE ? '<br>휴대폰에서는 기본 한국어 음성으로 읽습니다. 소리가 안 나면 무음 모드(벨소리 스위치)를 꺼 주세요. <b>가로로 돌리면</b> 면접관 세 명이 모두 보입니다.'
+       : natural ? '' : '<br>이 브라우저에는 자연스러운 한국어 음성이 없습니다. <b>Microsoft Edge</b>로 열면 사람에 가까운 음성(InJoon·SunHi 등)을 쓸 수 있습니다.');
+  });
+}
+
+let speakToken = 0, cur = null, paused = false;
+function stopSpeaking() {
+  speakToken++;
+  if (cur) { const c = cur; cur = null; try { c.stop(); } catch (e) {} }
+}
+// 휴대폰(특히 아이폰)은 사용자가 누른 순간에 한 번 재생된 오디오 요소만 계속 소리를 낼 수 있어서, 하나를 만들어 계속 재사용합니다.
+const voiceEl = new Audio(); voiceEl.playsInline = true;
+function playUrl(url, token) {
+  if (cur && cur.a) cur.stop();
+  return new Promise(res => {
+    const a = voiceEl; let done = false;
+    const fin = ok => { if (done) return; done = true; a.onended = a.onerror = null; if (cur && cur.a === a && cur.fin === fin) cur = null; res(ok); };
+    a.onended = () => fin(true);
+    a.onerror = () => fin(false);
+    a.src = url;
+    cur = { a, fin, stop() { a.pause(); fin(true); }, pause() { a.pause(); }, resume() { a.play().catch(() => {}); } };
+    if (token !== speakToken) return fin(true);
+    if (!paused) a.play().catch(err => { if (!err || err.name !== 'AbortError') fin(false); });
+    else a.load();
+  });
+}
+function unlockAudio() {
+  // 반드시 버튼을 누른 그 순간(await 전에) 호출해야 휴대폰에서 소리가 납니다.
+  try { const c = getCtx(); if (c && c.state === 'suspended') c.resume(); } catch (e) {}
+  try { voiceEl.src = SILENT_WAV; voiceEl.play().then(() => { if (voiceEl.src === SILENT_WAV) voiceEl.pause(); }).catch(() => {}); } catch (e) {}
+  try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } } catch (e) {}
+  try { vid.muted = false; vid.play().catch(() => {}); vid.muted = true; } catch (e) {}
+}
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+    else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && phase !== 'idle') keepAwake(true); });
+function speakTTS(text, spk, token) {
+  return new Promise(res => {
+    if (!('speechSynthesis' in window)) return res();
+    let done = false, timer = null, restart = false;
+    const fin = () => { if (done) return; done = true; clearTimeout(timer); if (cur && cur.tts) cur = null; res(); };
+    const start = () => {
+      if (token !== speakToken) return fin();
+      const u = new SpeechSynthesisUtterance(spoken(text));
+      u.lang = 'ko-KR';
+      const v = voices.find(v => v.name === S.voice) || voices[0]; if (v) u.voice = v;
+      u.rate = +S.rate || 1; u.pitch = (SPK[spk] || SPK.B).pitch;
+      u.onend = u.onerror = () => { if (paused && cur && cur.tts) { restart = true; return; } fin(); };
+      clearTimeout(timer); timer = setTimeout(fin, 5000 + text.length * 220 / u.rate);
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    };
+    cur = { tts: true,
+      stop() { fin(); speechSynthesis.cancel(); },
+      pause() { clearTimeout(timer); speechSynthesis.cancel(); },
+      resume() { start(); } };
+    start();
+  });
+}
+async function say(ph, spk, opts = {}) {
+  if (aborted) return;
+  const token = ++speakToken;
+  setSpeaker(spk, opts.show !== false ? ph.text : null);
+  const blob = await VoiceDB.get(ph.id);
+  if (token !== speakToken) return;
+  let played = false;
+  if (blob) { const url = URL.createObjectURL(blob); played = await playUrl(url, token); URL.revokeObjectURL(url); }
+  else if (!fileVoiceMiss.has(ph.id) && !ph.id.startsWith('_tmp')) {
+    played = await playUrl('media/voice/' + encodeURIComponent(ph.id) + '.mp3', token);
+    if (!played) fileVoiceMiss.add(ph.id);
+  }
+  if (!played && token === speakToken) await speakTTS(ph.text, spk, token);
+  await waitWhilePaused();
+}
+
+/* ---------- 마이크·카메라·녹화 ---------- */
+let media = null, analyser = null, micBuf = null, audioCtx = null, recorder = null, recChunks = [], recUrl = null, ambienceNode = null;
+async function initMedia(wantVideo) {
+  if (media) return media;
+  const audio = { echoCancellation: true, noiseSuppression: true };
+  try { media = await navigator.mediaDevices.getUserMedia({ video: wantVideo ? { width: 640, height: 480 } : false, audio }); }
+  catch (e) { try { media = await navigator.mediaDevices.getUserMedia({ audio }); } catch (e2) { media = null; } }
+  const hasVideo = media && media.getVideoTracks().length > 0;
+  $('#cam').srcObject = hasVideo ? media : null;
+  $('#camOff').classList.toggle('hidden', !!hasVideo);
+  if (media && media.getAudioTracks().length && getCtx()) {
+    const src = audioCtx.createMediaStreamSource(media);
+    analyser = audioCtx.createAnalyser(); analyser.fftSize = 1024; micBuf = new Float32Array(analyser.fftSize);
+    src.connect(analyser);
+  }
+  return media;
+}
+function micLevel() {
+  if (!analyser) return 0;
+  analyser.getFloatTimeDomainData(micBuf);
+  let s = 0; for (let i = 0; i < micBuf.length; i++) s += micBuf[i] * micBuf[i];
+  return Math.sqrt(s / micBuf.length);
+}
+function startAmbience() {
+  try {
+    if (!getCtx()) return;
+    const len = audioCtx.sampleRate * 4, buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate), d = buf.getChannelData(0);
+    let last = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.2; }
+    const src = audioCtx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
+    const g = audioCtx.createGain(); g.gain.value = 0.05;
+    src.connect(lp).connect(g).connect(audioCtx.destination); src.start();
+    ambienceNode = { src, g };
+  } catch (e) {}
+}
+function stopAmbience() { if (ambienceNode) { try { ambienceNode.src.stop(); } catch (e) {} ambienceNode = null; } }
+function startRecording() {
+  recChunks = []; recorder = null;
+  if (!S.record || !media || typeof MediaRecorder === 'undefined') return;
+  // 아이폰 Safari는 webm을 못 만들어서 mp4로 녹화합니다.
+  const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'audio/webm', 'audio/mp4'];
+  const mt = types.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return false; } }) || '';
+  try { recorder = new MediaRecorder(media, mt ? { mimeType: mt } : undefined); } catch (e) { recorder = null; return; }
+  recorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  recorder.start(1000);
+}
+function stopRecording() {
+  return new Promise(res => {
+    if (!recorder || recorder.state === 'inactive') return res(null);
+    recorder.onstop = () => res(new Blob(recChunks, { type: recorder.mimeType || 'video/webm' }));
+    recorder.stop();
+  });
+}
+
+/* ---------- 면접관 화면 연출 ---------- */
+const vid = $('#vid');
+// 세로 화면에서는 가로 영상의 일부만 보이므로, 질문하는 면접관이 화면 가운데 오도록 영상을 옆으로 옮깁니다.
+function panTo(xPct) {
+  const W = innerWidth, H = innerHeight, vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720;
+  const shownW = Math.max(W, H * vw / vh);
+  if (xPct == null || shownW - W < 2) { vid.style.objectPosition = ''; return false; }
+  const pos = Math.min(100, Math.max(0, (xPct / 100 * shownW - W / 2) / (shownW - W) * 100));
+  vid.style.objectPosition = `${pos.toFixed(1)}% 50%`;
+  return true;
+}
+let lastSpk = null;
+addEventListener('resize', () => { if (phase !== 'idle' && lastSpk) panTo(SPK[lastSpk].x); });
+function setSpeaker(spk, text) {
+  if (spk && phase !== 'idle') {
+    const p = SPK[spk]; lastSpk = spk;
+    const panned = panTo(p.x);
+    if (S.zoom) { vid.style.transformOrigin = panned ? `50% ${p.y}%` : `${p.x}% ${p.y}%`; vid.style.transform = 'scale(1.12)'; }
+    else vid.style.transform = 'scale(1)';
+  } else vid.style.transform = 'scale(1)';
+  const st = $('#state');
+  if (spk) { st.textContent = SPK[spk].name + ' 질문 중'; st.className = 'state ask'; }
+  if (text !== null && text !== undefined) {
+    $('#subtitle').innerHTML = S.subs ? `<span class="who">${SPK[spk] ? SPK[spk].name : ''}</span><br><span class="txt">${escapeHtml(text)}</span>` : '';
+  }
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function playVideoIntro() {
+  return new Promise(res => {
+    const t = ++speakToken; let done = false;
+    const fin = () => { if (done) return; done = true; vid.onended = null; vid.muted = true; vid.loop = true; vid.play().catch(() => {}); if (cur && cur.vintro) cur = null; res(); };
+    vid.loop = false; vid.muted = false; vid.currentTime = 0;
+    vid.onended = fin;
+    $('#state').textContent = '입실'; $('#state').className = 'state';
+    cur = { vintro: true, stop: fin, pause() {}, resume() {} };
+    vid.play().catch(() => fin());
+  });
+}
+
+/* ---------- 질문 뽑기 ---------- */
+function pool(s) {
+  return BANK.filter(q => s.cats.includes(q.cat) && (!s.univ || q.univ.length === 0 || q.univ.includes(s.univ)));
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function buildPlan(s) {
+  let p = pool(s);
+  if (s.order === 'random') {
+    // 대학을 골랐으면 그 대학이 명시된 질문을 앞쪽에 더 많이
+    if (s.univ) { const hit = shuffle(p.filter(q => q.univ.includes(s.univ))), rest = shuffle(p.filter(q => !q.univ.includes(s.univ))); p = hit.concat(rest); const n = +s.count || p.length; p = shuffle(p.slice(0, n)); }
+    else p = shuffle(p);
+  }
+  if (s.lastWord) p = p.filter(q => q.id !== 'A-Q18');
+  const motive = BANK.find(q => q.id === 'A-Q1');
+  if (s.firstMotive && motive) { p = p.filter(q => q.id !== 'A-Q1'); p.unshift(motive); }
+  const n = +s.count || p.length;
+  p = p.slice(0, n);
+  const spks = ['A', 'B', 'C'];
+  return p.map((q, i) => {
+    const fus = q.follow.filter(f => f.q && f.q.length > 3);
+    const fu = fus.length && Math.random() < +s.follow ? fus[Math.floor(Math.random() * fus.length)] : null;
+    return { q, spk: i === 0 ? 'B' : spks[Math.floor(Math.random() * 3)], fu, fuIdx: fu ? q.follow.indexOf(fu) : -1 };
+  });
+}
+
+/* ---------- 진행 ---------- */
+let S = {}, plan = [], records = [], aborted = false, phase = 'idle', listenCtx = null, listenResolve = null, skipAsk = false, repeatReq = false;
+let clock = { session: 0, rec: 0 }, lastTick = 0, pauseWaiters = [];
+
+function waitWhilePaused() { return paused ? new Promise(r => pauseWaiters.push(r)) : Promise.resolve(); }
+
+async function startInterview() {
+  S = readSettings(); saveSettings();
+  if (!S.cats.length) { alert('질문 범위를 하나 이상 고르세요.'); return; }
+  plan = buildPlan(S);
+  if (!plan.length) { alert('조건에 맞는 질문이 없습니다.'); return; }
+  unlockAudio(); keepAwake(true);
+  records = []; aborted = false; paused = false; skipAsk = false; repeatReq = false;
+  clock = { session: 0, rec: 0 };
+  show('room'); $('#stage').classList.remove('blur');
+  $('#subtitle').innerHTML = ''; $('#timer').textContent = '00:00'; $('#timer').className = 'timer';
+  renderProgress(-1);
+  const cd = $('#countdown'); cd.classList.remove('hidden'); cd.textContent = '카메라와 마이크를 준비하고 있습니다…';
+  await initMedia(true);
+  if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+  for (const n of [3, 2, 1]) { cd.textContent = `${n}초 후 면접이 시작됩니다. 화면 속 면접관을 바라보세요.`; await sleep(1000); }
+  cd.classList.add('hidden');
+  if (S.ambience) startAmbience();
+  startRecording();
+  $('#recDot').textContent = recorder ? 'REC 녹화 중' : '면접 중';
+  run();
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function run() {
+  phase = 'intro';
+  if (S.introAudio) await playVideoIntro();
+  if (!aborted) { phase = 'talk'; await say(PH.intro, 'B'); }
+  for (let i = 0; i < plan.length && !aborted; i++) {
+    const it = plan[i]; renderProgress(i);
+    if (i > 0 && !aborted) {
+      const r = records[records.length - 1];
+      phase = 'talk';
+      if (r && r.timedOut && S.cutoff) await say(PH.timeup, r.spk);
+      else if (r && !r.skipped) await say(ACKS[Math.floor(Math.random() * ACKS.length)], r.spk);
+    }
+    await ask({ id: it.q.id, text: politeize(it.q.q) }, it.spk, { kind: 'main', q: it.q });
+    if (it.fu && !aborted) {
+      phase = 'talk'; await say(Math.random() < .5 ? PH.fu1 : PH.fu2, it.spk);
+      await ask({ id: `${it.q.id}-F${it.fuIdx + 1}`, text: politeize(it.fu.q) }, it.spk, { kind: 'follow', q: it.q, fu: it.fu });
+    }
+  }
+  if (S.lastWord && !aborted) {
+    phase = 'talk'; await say(ACKS[0], 'B');
+    await ask(PH.last, 'B', { kind: 'last', q: BANK.find(q => q.id === 'A-Q18') });
+  }
+  if (!aborted) { phase = 'talk'; await say(PH.closing, 'B'); await sleep(600); }
+  finish();
+}
+
+async function ask(ph, spk, meta) {
+  if (aborted) return;
+  const rec = { ...meta, id: ph.id, text: ph.text, spk, answerSec: 0, timedOut: false, skipped: false, recAt: clock.rec };
+  records.push(rec);
+  $('#timer').innerHTML = '00:00' + (+S.limit ? ` <small>/ ${fmt(+S.limit)}</small>` : ''); $('#timer').className = 'timer';
+  while (!aborted) {
+    phase = 'asking'; skipAsk = false;
+    await say(ph, spk);
+    if (skipAsk) { rec.skipped = rec.answerSec < 1; return; }
+    if (aborted) return;
+    rec.recAt = rec.answerSec > 0 ? rec.recAt : clock.rec;
+    const why = await listen(rec);
+    if (why === 'repeat') continue;
+    if (why === 'timeup') rec.timedOut = true;
+    return;
+  }
+}
+
+function listen(rec) {
+  phase = 'listening';
+  vid.style.transform = 'scale(1)';
+  $('#state').textContent = '답변하세요'; $('#state').className = 'state listen';
+  return new Promise(res => {
+    listenCtx = { rec, spoke: false, silent: 0, floor: 0.01 };
+    listenResolve = why => { listenResolve = null; listenCtx = null; res(why); };
+  });
+}
+
+function tick(now) {
+  const dt = lastTick ? Math.min((now - lastTick) / 1000, 0.25) : 0; lastTick = now;
+  if (!$('#room').classList.contains('hidden')) {
+    const lv = micLevel();
+    $('#meter').style.width = Math.min(100, lv * 900) + '%';
+    if (!paused && phase !== 'idle') {
+      clock.session += dt;
+      if (recorder && recorder.state === 'recording') clock.rec += dt;
+    }
+    if (listenCtx && !paused) {
+      const c = listenCtx, r = c.rec;
+      r.answerSec += dt;
+      if (!c.spoke) c.floor = c.floor * 0.97 + lv * 0.03;
+      const thr = Math.max(0.018, c.floor * 2.5);
+      if (lv > thr) { c.spoke = true; c.silent = 0; } else c.silent += dt;
+      const lim = +S.limit, sil = +S.silence;
+      const t = $('#timer');
+      t.innerHTML = fmt(r.answerSec) + (lim ? ` <small>/ ${fmt(lim)}</small>` : '');
+      t.className = 'timer' + (lim && r.answerSec > lim ? ' over' : '');
+      if (lim && S.cutoff && r.answerSec >= lim) listenResolve('timeup');
+      else if (sil && c.spoke && c.silent >= sil) listenResolve('silence');
+    }
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+const fmt = s => { s = Math.max(0, Math.floor(s)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+
+function renderProgress(i) {
+  const total = plan.length + (S.lastWord ? 1 : 0);
+  $('#progress').innerHTML = Array.from({ length: total }, (_, k) => `<i class="${k < i ? 'done' : k === i ? 'now' : ''}"></i>`).join('') +
+    `<span style="margin-left:8px;color:var(--muted)">${Math.max(0, Math.min(i + 1, total))} / ${total}</span>`;
+}
+
+/* ---------- 조작 ---------- */
+function doNext() {
+  if (paused) togglePause();
+  if (phase === 'listening' && listenResolve) listenResolve('next');
+  else if (phase === 'asking') { skipAsk = true; stopSpeaking(); }
+  else stopSpeaking();
+}
+function doRepeat() {
+  if (paused) togglePause();
+  if (phase === 'listening' && listenResolve) listenResolve('repeat');
+}
+function togglePause() {
+  if (phase === 'idle') return;
+  paused = !paused;
+  $('#pauseOv').classList.toggle('hidden', !paused);
+  $('#pauseBtn').innerHTML = paused ? '▶ <span class="l">계속하기</span><span class="s">계속</span> <kbd>Space</kbd>' : '⏸ <span class="l">일시정지</span><span class="s">정지</span> <kbd>Space</kbd>';
+  if (paused) {
+    vid.pause(); if (cur) cur.pause();
+    if (recorder && recorder.state === 'recording') recorder.pause();
+    if (ambienceNode) ambienceNode.g.gain.value = 0;
+  } else {
+    vid.play().catch(() => {}); if (cur) cur.resume();
+    if (recorder && recorder.state === 'paused') recorder.resume();
+    if (ambienceNode) ambienceNode.g.gain.value = 0.05;
+    const w = pauseWaiters; pauseWaiters = []; w.forEach(f => f());
+  }
+}
+function doEnd() {
+  if (!confirm('면접을 여기서 끝낼까요?')) return;
+  aborted = true; if (paused) togglePause();
+  stopSpeaking(); if (listenResolve) listenResolve('end');
+}
+
+async function finish() {
+  phase = 'idle'; stopSpeaking(); if ('speechSynthesis' in window) speechSynthesis.cancel(); stopAmbience(); keepAwake(false);
+  vid.muted = true; vid.loop = true; vid.style.transform = 'scale(1)'; vid.style.objectPosition = ''; lastSpk = null;
+  const blob = await stopRecording();
+  if (recUrl) URL.revokeObjectURL(recUrl);
+  recUrl = blob && blob.size ? URL.createObjectURL(blob) : null;
+  $('#recDl').download = '모의면접_녹화.' + (blob && /mp4/.test(blob.type) ? 'mp4' : 'webm');
+  renderReview();
+  show('review'); $('#stage').classList.add('blur');
+}
+
+function renderReview() {
+  const answered = records.filter(r => !r.skipped);
+  const total = answered.reduce((a, r) => a + r.answerSec, 0);
+  const L = +S.limit;
+  const over = answered.filter(r => L && r.answerSec > L).length;
+  $('#stats').innerHTML = [
+    [records.length, '받은 질문'], [fmt(clock.session), '전체 면접 시간'],
+    [answered.length ? fmt(total / answered.length) : '-', '평균 답변 시간'],
+    [L ? over : '-', L ? `${fmt(L)} 넘긴 답변` : '시간 제한 없음']
+  ].map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+  $('#recBox').classList.toggle('hidden', !recUrl);
+  if (recUrl) { $('#recVid').src = recUrl; $('#recDl').href = recUrl; }
+  $('#qaList').innerHTML = records.map((r, i) => {
+    const q = r.q || {};
+    const model = r.kind === 'follow' ? (r.fu && r.fu.answer) : q.answer;
+    const lim = +S.limit;
+    const time = r.skipped ? '건너뜀' : `<span class="${lim && r.answerSec > lim ? 'over' : ''}">${fmt(r.answerSec)}</span>${r.timedOut ? ' · 시간 초과로 끊김' : ''}`;
+    const fus = r.kind === 'main' ? (q.follow || []) : [];
+    return `<div class="qa">
+      <div class="h"><a class="n" href="#" data-seek="${r.recAt}">Q${i + 1}</a>
+        ${r.kind === 'follow' ? '<span class="tag follow">꼬리 질문</span>' : ''}
+        <span class="q">${escapeHtml(r.text)}</span>
+        <span class="meta">${SPK[r.spk].name} · ${time}</span></div>
+      ${model || (r.kind === 'main' && q.notes && q.notes.length) ? `<details><summary>모범 답안 · 준비 메모 보기</summary>
+        ${model ? `<div class="ans">${escapeHtml(model)}</div>` : ''}
+        ${r.kind !== 'follow' ? (q.notes || []).map(n => `<div class="note">${escapeHtml(n)}</div>`).join('') : ''}
+        ${fus.length ? `<div class="fu">이어질 수 있는 질문:<br>${fus.map(f => `<b>↳ ${escapeHtml(f.q)}</b> ${escapeHtml(f.answer || '')}`).join('<br>')}</div>` : ''}
+      </details>` : ''}
+    </div>`;
+  }).join('');
+}
+$('#qaList').addEventListener('click', e => {
+  const a = e.target.closest('[data-seek]'); if (!a) return; e.preventDefault();
+  if (!recUrl) return;
+  const v = $('#recVid'); v.currentTime = Math.max(0, +a.dataset.seek - 1); v.play().catch(() => {}); v.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+/* ---------- 화면 전환 ---------- */
+function show(id) { ['setup', 'room', 'review', 'studio'].forEach(s => $('#' + s).classList.toggle('hidden', s !== id)); }
+
+/* ---------- 녹음실 ---------- */
+let stRecorder = null, stRecId = null;
+function studioItems(filter) {
+  const items = [];
+  if (!filter || filter === '_') Object.values(PH).forEach(p => items.push({ id: p.id, text: p.text, src: '공통 멘트' }));
+  BANK.forEach(q => {
+    if (filter && filter !== q.cat) return;
+    items.push({ id: q.id, text: politeize(q.q), src: q.cat });
+    q.follow.forEach((f, k) => items.push({ id: `${q.id}-F${k + 1}`, text: politeize(f.q), src: '꼬리 질문 · ' + q.id }));
+  });
+  return items;
+}
+async function renderStudio() {
+  const f = $('#stFilter').value, items = studioItems(f), keys = new Set(await VoiceDB.keys());
+  $('#stCount').textContent = `${items.length}개 중 ${items.filter(i => keys.has(i.id)).length}개 녹음됨`;
+  $('#stList').innerHTML = items.map(it => `<div class="st-row" data-id="${it.id}">
+      <span class="id">${it.id}</span>
+      <span class="tx">${escapeHtml(it.text)}<span class="src">${escapeHtml(it.src)}</span></span>
+      <span class="bt">
+        <span class="badge ${keys.has(it.id) ? 'rec' : ''}">${keys.has(it.id) ? '사람 목소리' : '컴퓨터 음성'}</span>
+        <button class="btn small" data-act="play">▶ 듣기</button>
+        <button class="btn small" data-act="rec">● 녹음</button>
+        ${keys.has(it.id) ? '<button class="btn small" data-act="del">삭제</button>' : ''}
+      </span></div>`).join('');
+}
+$('#stList').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const row = b.closest('.st-row'), id = row.dataset.id, text = row.querySelector('.tx').firstChild.textContent;
+  if (b.dataset.act === 'play') { S = readSettings(); stopSpeaking(); unlockAudio(); say({ id, text }, 'B', { show: false }); }
+  if (b.dataset.act === 'del') { await VoiceDB.del(id); renderStudio(); }
+  if (b.dataset.act === 'rec') {
+    if (stRecorder && stRecId === id) { stRecorder.stop(); return; }
+    if (stRecorder) return;
+    let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch (err) { alert('마이크를 쓸 수 없습니다. 브라우저에서 마이크 권한을 허용해 주세요.'); return; }
+    const chunks = []; stRecorder = new MediaRecorder(stream); stRecId = id;
+    stRecorder.ondataavailable = ev => ev.data.size && chunks.push(ev.data);
+    stRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, { type: stRecorder.mimeType || 'audio/webm' });
+      stRecorder = null; stRecId = null;
+      if (blob.size > 2000) { await VoiceDB.put(id, blob); fileVoiceMiss.delete(id); }
+      renderStudio();
+    };
+    stRecorder.start();
+    b.classList.add('recording'); b.textContent = '■ 녹음 끝';
+  }
+});
+
+/* ---------- 초기화 ---------- */
+$('#cats').innerHTML = CATS.map(c => `<label class="chip"><input type="checkbox" value="${c}" ${c !== '학교 질문지' ? 'checked' : ''}> ${c} <small>${BANK.filter(q => q.cat === c).length}</small></label>`).join('');
+$('#stFilter').innerHTML = `<option value="">전체</option><option value="_">공통 멘트만</option>` + CATS.map(c => `<option value="${c}">${c}</option>`).join('');
+loadSettings();
+function updatePool() {
+  const s = readSettings(); const n = pool(s).length; const want = +s.count || n;
+  $('#poolCount').textContent = `해당 질문 ${n}개 중 ${Math.min(want, n)}개 출제`;
+  $('#rateV').textContent = '×' + (+s.rate).toFixed(2);
+}
+$('#setup').addEventListener('change', () => { updatePool(); saveSettings(); });
+$('#rate').addEventListener('input', updatePool);
+updatePool();
+loadVoices(); if ('speechSynthesis' in window) speechSynthesis.onvoiceschanged = loadVoices;
+
+$('#startBtn').onclick = startInterview;
+$('#studioBtn').onclick = () => { show('studio'); renderStudio(); };
+$('#studioBack').onclick = () => { if (stRecorder) stRecorder.stop(); stopSpeaking(); show('setup'); updateVoiceNote(); };
+$('#stFilter').onchange = renderStudio;
+$('#nextBtn').onclick = doNext;
+$('#repeatBtn').onclick = doRepeat;
+$('#pauseBtn').onclick = togglePause;
+$('#endBtn').onclick = doEnd;
+$('#homeBtn').onclick = () => { show('setup'); updateVoiceNote(); };
+$('#againBtn').onclick = startInterview;
+document.addEventListener('keydown', e => {
+  if ($('#room').classList.contains('hidden') || e.target.closest('input,select,textarea')) return;
+  if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+  else if (e.key === 'ArrowRight' || e.key === 'n') { e.preventDefault(); doNext(); }
+  else if (e.key === 'r' || e.key === 'R') doRepeat();
+  else if (e.key === 'Escape') doEnd();
+});
+vid.play().catch(() => {});
+</script>
+</body>
+</html>
